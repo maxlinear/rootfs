@@ -1,7 +1,7 @@
 {
 	"Interfaces": [
 		{"Alias": "ETH1","Name": "eth1","Type": "ethernet","Upstream": "true"},
-		{"Alias": "VANI0","Name": "VANI0","Type": "xpon"},
+		{"Alias": "VANI0","Name": "VANI0","Type": "xpon","Upstream": "true"},
 		{"Alias": "ETH0_1","Name": "eth0_1","Type": "ethernet"},
 		{"Alias": "ETH0_2","Name": "eth0_2","Type": "ethernet"},
 		{"Alias": "ETH0_3","Name": "eth0_3","Type": "ethernet"},
