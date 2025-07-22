@@ -3,6 +3,8 @@
 . /lib/functions.sh
 . /lib/netifd/netifd-proto.sh
 
+IFACE_464XLAT=0
+
 setup_interface () {
 	local device="$1"
 	local prefsig=""

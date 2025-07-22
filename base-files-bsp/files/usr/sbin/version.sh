@@ -225,6 +225,7 @@ ver_wlan()
 	[ -n "$wave600B_progmodel_ver" ] && echo "Wave wlan Wave600B PROGMODEL version: $wave600B_progmodel_ver"
 	[ -n "$wave600D2_progmodel_ver" ] && echo "Wave wlan Wave600D2 PROGMODEL version: $wave600D2_progmodel_ver"
 	[ -n "$wave700_progmodel_ver" ] && echo "Wave wlan Wave700 PROGMODEL version: $wave700_progmodel_ver"
+	[ -n "$wave700B_progmodel_ver" ] && echo "Wave wlan Wave700B PROGMODEL version: $wave700B_progmodel_ver"
 	[ -n "$wave_sw_atom_tag" ] && echo "Wave SW Atom(TM) tag: $wave_sw_atom_tag"
 	[ -n "$wave_fpga_sim_ver" ] && echo "FPGA SIM version: $wave_fpga_sim_ver"
 	[ -n "$wave_psd_ver" ] && echo "Wave wlan PSD version: $wave_psd_ver"

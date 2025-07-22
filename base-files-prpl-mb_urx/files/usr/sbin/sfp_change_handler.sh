@@ -1,0 +1,89 @@
+#!/bin/sh
+# shellcheck shell=dash
+
+log() {
+    [ -n "$DEBUG" ] && echo "[sfp_change] $*" && return
+    logger "[sfp_change] $*"
+}
+
+_exit() {
+    log "Exit with $1"
+    case "$1" in
+        "SUCCESS")
+            exit 0
+        ;;
+        "FAILURE" | "NO_REBOOT")
+            exit 1
+        ;;
+        "REBOOT")
+            # change to "2" when supported by SFP Manager
+            exit 0
+        ;;
+        *)
+            # try if param is a number,
+            # if not the script will anyway stop with error
+            exit "$1"
+        ;;
+    esac
+}
+
+if [ -n "$DEBUG" ]; then
+    # simple emulation for debugging
+    fw_printenv() {
+        [ "$1" = "-n" ] && shift
+        cat "$1"
+    }
+    fw_setenv() {
+        echo "$2" > "$1"
+    }
+fi
+
+get_image_mode() {
+    fw_printenv -n wantype
+}
+
+set_image_mode() {
+    log "Set new image mode $1"
+    fw_setenv wantype "$1"
+}
+
+sfp_type=$1
+
+case "$sfp_type" in
+    "SFP_GPON" | "SFP_XGSPON")
+        case "$(get_image_mode)" in
+            pon*)
+                log "Already PON, reboot to init again"
+                # future enhancement can check here if reactivation without reboot might be possible
+                _exit REBOOT
+            ;;
+            *)
+                log "Switch to PON"
+                set_image_mode pon
+                _exit REBOOT
+            ;;
+        esac
+    ;;
+    "SFP_COPPER" | "SFP_AE")
+        case "$(get_image_mode)" in
+            eth*)
+                log "Already ETH, no reboot"
+                _exit NO_REBOOT
+            ;;
+            *)
+                log "Switch to ETH"
+                set_image_mode eth
+                _exit REBOOT
+            ;;
+        esac
+    ;;
+    "SFP_UNKNOWN")
+        log "Type of SFP not known, no automatic switching"
+        _exit FAILURE
+    ;;
+    *)
+        log "Invalid argument $sfp_type"
+        log "Accepted values: SFP_COPPER, SFP_AE, SFP_GPON, SFP_XGSPON, SFP_UNKNOWN"
+        _exit FAILURE
+    ;;
+esac

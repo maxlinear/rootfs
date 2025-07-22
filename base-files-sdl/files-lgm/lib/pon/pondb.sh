@@ -1,6 +1,7 @@
 #!/bin/sh
 # shellcheck shell=dash
-
+# shellcheck disable=SC2155
+#
 # In contrast to the original file, Ubus calls
 # are used here to read and write UCI config files.
 # Furthermore, a synchronization file /tmp/pon_uci_cfg
@@ -70,7 +71,7 @@ ubus_uci_file_merge() {
             fi
         else
             option=$(echo $line | awk '/option/ {print $2}' | tr -d "\'")
-            if [ -n "$sec_name" ] && [ -n "option" ]; then
+            if [ -n "$sec_name" ] && [ -n "$option" ]; then
                 val=$(echo $line | awk ' {print $3}' | tr -d "\'")
                 pon_ubus_uci_set "$file" "$sec_name" "$option" "$val"
             fi
@@ -93,8 +94,6 @@ append() {
 }
 
 image_version_get() {
-    local ugw_ver
-
     # prefer the PON version, but if it is not there use the URDK version
     if [ -f /etc/pon.ver ]; then
         image_version=$(cat /etc/pon.ver)
@@ -105,7 +104,7 @@ image_version_get() {
     fi
 }
 
-read_eeprom() {
+read_eeprom_real_count() {
     local skip="$1"
     shift || return
     local count="$1"
@@ -114,11 +113,20 @@ read_eeprom() {
     dd iflag=skip_bytes,count_bytes if="$EEPROM_PATH" skip="$skip" count="$count" 2> /dev/null
 }
 
+read_eeprom_bs1() {
+    local skip="$1"
+    shift || return
+    local count="$1"
+    shift || return
+
+    dd bs=1 if="$EEPROM_PATH" skip="$skip" count="$count" 2> /dev/null
+}
+
 transceiver_names_get() {
-    local vendor_name="$(read_eeprom 20 16 | normalize)"
-    local vendor_oui="$(read_eeprom 37 3 | hexdump -ve '1/1 "%.2x"')"
-    local part_number="$(read_eeprom 40 16 | normalize)"
-    local revision="$(read_eeprom 56 4 | normalize_revision)"
+    local vendor_name="$($READ_EEPROM 20 16 | normalize)"
+    local vendor_oui="$($READ_EEPROM 37 3 | hexdump -ve '1/1 "%.2x"')"
+    local part_number="$($READ_EEPROM 40 16 | normalize)"
+    local revision="$($READ_EEPROM 56 4 | normalize_revision)"
 
     #Examples:
     #wtd-001cad-rtsm166-501-1.0
@@ -139,22 +147,26 @@ transceiver_names_get() {
 }
 
 optic_files_get() {
-    local board="$(pon_board_name)"
+    local board="$(pon_board_base_name)"
 
     if [ -n "$board" ]; then
-        # prepend directoy name and append board name
+        # prepend directory name and append board name
         #Example: /etc/optic-db/superxonltd-sogx2699-psga-urx851-eva
         transceiver_names_get | prepend "$OPTIC_DB_LOCATION/" | append "-$board"
     fi
+
     #We prepend directory name
     #Example: /etc/optic-db/wtd-001cad-rtsm166-501-1.0
     transceiver_names_get | prepend "$OPTIC_DB_LOCATION/"
 
-    echo "$OPTIC_DB_LOCATION/default"
+    # Add a generic default for the board
+    if [ -n "$board" ]; then
+        echo "$OPTIC_DB_LOCATION/default-$board"
+    fi
 }
 
 serdes_files_get() {
-    local board="$(pon_board_name)"
+    local board="$(pon_board_base_name)"
 
     if [ -n "$board" ]; then
         #We prepend directory name
@@ -181,8 +193,6 @@ config_apply() {
     if [ -n "$config_file" ]; then
         ubus_uci_file_merge "$config" "$config_file" &&
             log_console "[${config}-db] Applied '$config_file' configuration"
-    else
-        log_console "[${config}-db] Using default configuration"
     fi
 }
 
@@ -194,6 +204,14 @@ if [ -z "$EEPROM_PATH" ]; then
 fi
 
 image_version_get
+
+# check if dd supports needed flags for optimized read
+if dd iflag=skip_bytes,count_bytes if=/dev/zero of=/dev/null count=1 2> /dev/null; then
+    READ_EEPROM=read_eeprom_real_count
+else
+    READ_EEPROM=read_eeprom_bs1
+fi
+
 # get first name (most detailed) as reference
 transceiver_name=$(transceiver_names_get | head -n1)
 
@@ -203,6 +221,7 @@ optic_transceiver="$(pon_ubus_uci_get "optic" "common" "transceiver_name")"
 [ "$optic_transceiver" != "$transceiver_name" ] && optic_change=1
 
 if [ $optic_change ]; then
+    config_apply optic "$OPTIC_DB_LOCATION/default"
     config_apply optic $(optic_files_get)
     pon_ubus_uci_set "optic" "common" "version" "$image_version"
     pon_ubus_uci_set "optic" "common" "transceiver_name" "$transceiver_name"

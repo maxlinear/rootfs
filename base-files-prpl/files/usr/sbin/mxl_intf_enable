@@ -1,0 +1,361 @@
+#!/bin/sh
+#
+# Copyright © 2025 Maxlinear, Inc.
+# note: This script is for setting up network interfaces and WiFi configurations.
+#
+# The instance for partiular interface are as follows:
+# ETH and PON Static: WANManager.WAN.9
+# ETH DHCP: WANManager.WAN.2
+# PON DHCP: WANManager.WAN.5
+# WiFi: WiFi.Radio.1, WiFi.Radio.2, WiFi.Radio.3 (2.4G, 5G, 6G)
+# WiFi Access Point: WiFi.AccessPoint.1, WiFi.AccessPoint.2, WiFi.AccessPoint.3 (5G, 2.4G, 6G)
+# WiFi SSID: WiFi.SSID.1, WiFi.SSID.2, WiFi.SSID.3 (5G, 2.4G, 6G)
+#
+# in case of any change in the data model, please change the script accordingly.
+
+set_ethernet_mode() {
+    if [ "$1" = "-t" ]; then
+        if [ -z "$2" ]; then
+            echo "Usage: $0 -eth -t <VlanID> [-s <default gateway v4> <ipv4_address> <default gateway v6 > <ipv6_address>]"
+            exit 1
+        fi
+
+        VlanID=$2
+        shift 2
+
+        if [ "$1" = "-s" ]; then
+            if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ] || [ -z "$4" ]; then
+                echo "Usage: $0 -eth -t <VlanID> -s <default gateway v4> <ipv4_address> <default gateway v6 > <ipv6_address>"
+                exit 1
+            fi
+
+            default_gateway=$2
+            ipv4_address=$3
+            default_gateway_v6=$3
+            ipv6_address=$4
+
+            # Configure tagged static mode
+            ubus call WANManager.WAN _add '{"parameters":{"Alias":"Ethernet_static","PhysicalType":"Ethernet"}}'
+            sleep 1
+            ubus call WANManager.WAN.9.Intf _add "{\"parameters\":{\"IPv6Reference\": \"Device.IP.Interface.2.\",\"IPv4Mode\": \"static\",\"IPv6Mode\": \"static\",\"IPv4Reference\": \"Device.IP.Interface.2.\",\"Name\": \"wan\",\"VlanID\": $VlanID,\"Type\": \"vlan\",\"Alias\": \"wan\"}}"
+            sleep 1
+            ubus call WANManager.WAN.9.Intf.1.IPv4Address _add "{\"parameters\":{\"DefaultRouter\": \"$default_gateway\", \"IPv4Address\": \"$ipv4_address\",\"SubnetMask\": \"255.255.255.0\"}}"
+            sleep 1
+            ubus call WANManager.WAN.9.Intf.1.IPv6Address _add "{\"parameters\":{\"IPv6Address\": \"$default_gateway_v6\", \"$ipv6_address\": \"2001:DB8:35:FF01::1\"}}"
+            sleep 1
+            ubus call WANManager _set '{"parameters":{"WANMode": "Ethernet_static"}}'
+
+            echo "Tagged static mode enabled with VLAN ID $VlanID, default gateway $default_gateway, and IPv4 address $ipv4_address."
+        else
+            # Configure tagged DHCP mode
+            ubus call WANManager.WAN.2.Intf.1 _set "{ \"parameters\":{ \"VlanID\":\"$VlanID\" } }" > /dev/null 2>&1
+            sleep 1
+            ubus call WANManager _set '{ "parameters":{ "WANMode":"Ethernet_DHCP" } }' > /dev/null 2>&1
+
+            echo "VLAN ID set to $VlanID and WAN mode set to Ethernet_DHCP."
+        fi
+    elif [ "$1" = "-ut" ]; then
+        if [ "$2" = "-s" ]; then
+            if [ -z "$3" ] || [ -z "$4" ] || [ -z "$5" ] || [ -z "$6" ]; then
+                echo "Usage: $0 -eth -t <VlanID> -s <default gateway v4> <ipv4_address> <default gateway v6 > <ipv6_address>"
+                exit 1
+            fi
+
+            default_gateway=$3
+            ipv4_address=$4
+            default_gateway_v6=$5
+            ipv6_address=$6
+
+            # Configure untagged static mode
+            ubus call WANManager.WAN _add '{"parameters":{"Alias":"Ethernet_static","PhysicalType":"Ethernet"}}'
+            ubus call WANManager.WAN.9.Intf _add '{"parameters":{"IPv6Reference": "Device.IP.Interface.2.","IPv4Mode": "static","IPv6Mode": "static","IPv4Reference": "Device.IP.Interface.2.","Name": "wan","Type": "untagged","Alias": "wan"}}'
+            ubus call WANManager.WAN.9.Intf.1.IPv4Address _add "{\"parameters\":{\"DefaultRouter\": \"$default_gateway\", \"IPv4Address\": \"$ipv4_address\",\"SubnetMask\": \"255.255.255.0\"}}"
+            ubus call WANManager.WAN.9.Intf.1.IPv6Address _add "{\"parameters\":{\"IPv6Address\": \"$default_gateway_v6\", \"DefaultRouter\": \"$ipv6_address\"}}"
+            ubus call WANManager _set '{"parameters":{"WANMode": "Ethernet_static"}}'
+
+            echo "Untagged static mode enabled with default gateway $default_gateway and IPv4 address $ipv4_address."
+        else
+            echo "Invalid mode. Use -s for static IP configuration in untagged mode."
+            exit 1
+        fi
+    else
+        echo "Invalid mode. Use -t for tagged or -ut for untagged mode."
+        exit 1
+    fi
+}
+
+set_pon_mode() {
+    if [ "$1" = "-ut" ]; then
+        if [ -z "$2" ]; then
+            echo "Usage: $0 -pon -ut <serialnumber> [-s <default_gateway> <ipv4_address>]"
+            exit 1
+        fi
+
+        serialnumber=$2
+        shift 2
+
+        if [ "$1" = "-s" ]; then
+            if [ -z "$2" ] || [ -z "$3" ]; then
+                echo "Usage: $0 -pon -ut <serialnumber> -s <default_gateway> <ipv4_address> <default gateway v6 > <ipv6_address>"
+                exit 1
+            fi
+
+            default_gateway=$2
+            ipv4_address=$3
+
+            # Configure untagged static mode
+            sed -i "s/option nSerial.*/option nSerial '$serialnumber'/g" /etc/config/gpon
+            /etc/init.d/omcid.sh restart
+            ubus call WANManager.WAN _add '{"parameters":{"Alias":"GPON_static","PhysicalType":"GPON"}}'
+            ubus call WANManager.WAN.9.Intf _add '{"parameters":{"IPv6Reference": "Device.IP.Interface.2.","IPv4Mode": "static","IPv6Mode": "static","IPv4Reference": "Device.IP.Interface.2.","Name": "wan","Type": "untagged","Alias": "wan"}}'
+            ubus call WANManager.WAN.9.Intf.1.IPv4Address _add "{\"parameters\":{\"DefaultRouter\": \"$default_gateway\", \"IPv4Address\": \"$ipv4_address\",\"SubnetMask\": \"255.255.255.0\"}}"
+            ubus call WANManager.WAN.9.Intf.1.IPv6Address _add "{\"parameters\":{\"IPv6Address\": \"$default_gateway_v6\", \"DefaultRouter\": \"$ipv6_address\"}}"
+            ubus call WANManager _set '{"parameters":{"WANMode": "GPON_static"}}'
+
+            echo "Untagged static mode enabled with serial number $serialnumber, default gateway $default_gateway, and IPv4 address $ipv4_address."
+        else
+            # Configure untagged DHCP mode
+            sed -i "s/option nSerial.*/option nSerial '$serialnumber'/g" /etc/config/gpon
+            /etc/init.d/omcid.sh restart
+            ubus call WANManager.WAN.5.Intf.1 _set '{ "parameters":{ "VlanID":"100","Type": "untagged" } }' > /dev/null 2>&1
+            sleep 1
+            ubus call WANManager _set '{ "parameters":{ "WANMode":"GPON_DHCP" } }' > /dev/null 2>&1
+
+            echo "Untagged mode enabled with serial number $serialnumber and WAN mode set to GPON_DHCP."
+        fi
+    elif [ "$1" = "-t" ]; then
+        if [ -z "$2" ] || [ -z "$3" ]; then
+            echo "Usage: $0 -pon -t <VlanID> <serialnumber> [-s <default_gateway> <ipv4_address><default gateway v6 > <ipv6_address>]"
+            exit 1
+        fi
+
+        VlanID=$2
+        serialnumber=$3
+        shift 3
+
+        if [ "$1" = "-s" ]; then
+            if [ -z "$2" ] || [ -z "$3" ] ||  [ -z "$4" ] || [ -z "$5" ] ; then
+                echo "Usage: $0 -pon -t <VlanID> <serialnumber> -s <default_gateway> <ipv4_address> <default gateway v6 > <ipv6_address>"
+                exit 1
+            fi
+
+            default_gateway=$2
+            ipv4_address=$3
+
+            # Configure tagged static mode
+            sed -i "s/option nSerial.*/option nSerial '$serialnumber'/g" /etc/config/gpon
+            /etc/init.d/omcid.sh restart
+            ubus call WANManager.WAN _add '{"parameters":{"Alias":"GPON_static","PhysicalType":"GPON"}}'
+            ubus call WANManager.WAN.9.Intf _add "{\"parameters\":{\"IPv6Reference\": \"Device.IP.Interface.2.\",\"IPv4Mode\": \"static\",\"IPv6Mode\": \"static\",\"IPv4Reference\": \"Device.IP.Interface.2.\",\"Name\": \"wan\",\"VlanID\": $VlanID,\"Type\": \"vlan\",\"Alias\": \"wan\"}}"
+            ubus call WANManager.WAN.9.Intf.1.IPv4Address _add "{\"parameters\":{\"DefaultRouter\": \"$default_gateway\", \"IPv4Address\": \"$ipv4_address\",\"SubnetMask\": \"255.255.255.0\"}}"
+            ubus call WANManager.WAN.9.Intf.1.IPv6Address _add "{\"parameters\":{\"IPv6Address\": \"$default_gateway_v6\", \"DefaultRouter\": \"$ipv6_address\"}}"
+            ubus call WANManager _set '{"parameters":{"WANMode": "GPON_static"}}'
+
+            echo "Tagged static mode enabled with VLAN ID $VlanID, serial number $serialnumber, default gateway $default_gateway, and IPv4 address $ipv4_address."
+        else
+            # Configure tagged DHCP mode
+            sed -i "s/option nSerial.*/option nSerial '$serialnumber'/g" /etc/config/gpon
+            /etc/init.d/omcid.sh restart
+            ubus call WANManager.WAN.5.Intf.1 _set "{ \"parameters\":{ \"VlanID\":\"$VlanID\" } }" > /dev/null 2>&1
+            sleep 1
+            ubus call WANManager _set '{ "parameters":{ "WANMode":"GPON_DHCP" } }' > /dev/null 2>&1
+
+            echo "VLAN ID set to $VlanID and WAN mode set to GPON_DHCP."
+        fi
+    else
+        echo "Invalid mode. Use -ut for untagged or -t for tagged mode."
+        exit 1
+    fi
+}
+
+set_wifi() {
+    # Check if an optional parameter is provided
+    case "$1" in
+        2G)
+            echo "Configuring 2.4G WiFi..."
+            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"ObssCoexistenceEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.SSID.2 set '{"parameters": {"SSID": "2.4G_PRPL"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingChannelBandwidth": "40MHz"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"Channel": "11"}}' > /dev/null 2>&1
+            sleep 1
+            ;;
+        5G)
+            echo "Configuring 5G WiFi..."
+            ubus call WiFi.AccessPoint.1 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.1 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.1 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.SSID.1 _set '{"parameters": {"SSID": "5G_PRPL"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"Channel": "36"}}' > /dev/null 2>&1
+            sleep 1
+            ;;
+        6G)
+            echo "Configuring 6G WiFi..."
+            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"MFPConfig": "Required"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.SSID.3 _set '{"parameters": {"SSID": "6G_PRPL"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"ModeEnabled": "WPA3-Personal"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"SAEPassphrase": "password"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"Channel": "37"}}' > /dev/null 2>&1
+            sleep 1
+            ;;
+        *)
+            echo "Configuring all WiFi bands (2.4G, 5G, 6G)..."
+            set_wifi 2G
+            set_wifi 5G
+            set_wifi 6G
+            ;;
+    esac
+}
+
+set_mode() {
+  if [ $# -lt 1 ] || { [ "$1" != "-pon" ] && [ "$1" != "-eth" ] && [ "$1" != "-wifi" ]; }; then
+    echo "Usage:"
+    echo "$0 -pon -t <VlanID> <serialnumber> [-s <default gateway v4 > <ipv4_address> <default gateway v6 > <ipv6_address>]   // To enable PON mode, Use -s for static IP"
+    echo "$0 -pon -ut <serialnumber> [-s <default gateway v4 > <ipv4_address> <default gateway v6 > <ipv6_address>]           // To enable PON mode (untagged), Use -s for static IP"
+    echo "$0 -eth -t <VlanID> [-s <default gateway v4 > <ipv4_address> <default gateway v6 > <ipv6_address>]                  // To enable ETH mode, Use -s for static IP"
+    echo "$0 -wifi                                                                                                             // To enable WiFi all bands"
+    echo "$0 -wifi [2G|5G|6G]                                                                                                  // To enable WiFi specific band"
+    echo "$0 -pon -t <VlanID> <serialnumber> -wifi                                                                             // Set PON and WiFi with VLAN ID and serial number"
+    echo "$0 -eth -t <VlanID> -wifi                                                                                            // Set ETH and WiFi with VLAN ID"
+    exit 1
+  fi
+
+  wifi_band=""
+  if [ "$1" = "-pon" ]; then
+    if [ "$2" = "-ut" ]; then
+      if [ $# -ge 3 ]; then
+        serialnumber="$3"
+        shift 3
+        if [ "$1" = "-s" ]; then
+          if [ $# -ge 3 ]; then
+            default_gateway="$2"
+            ipv4_address="$3"
+            shift 3
+            set_pon_mode "-ut" "$serialnumber" "-s" "$default_gateway" "$ipv4_address"
+          else
+            echo "Usage: $0 -pon -ut <serialnumber> -s <default_gateway> <ipv4_address>"
+            exit 1
+          fi
+        else
+          set_pon_mode "-ut" "$serialnumber"
+        fi
+      else
+        echo "Usage: $0 -pon -ut <serialnumber> [-s <default_gateway> <ipv4_address>]"
+        exit 1
+      fi
+    elif [ "$2" = "-t" ]; then
+      if [ $# -ge 4 ]; then
+        VlanID="$3"
+        serialnumber="$4"
+        shift 4
+        if [ "$1" = "-s" ]; then
+          if [ $# -ge 3 ]; then
+            default_gateway="$2"
+            ipv4_address="$3"
+            shift 3
+            set_pon_mode "-t" "$VlanID" "$serialnumber" "-s" "$default_gateway" "$ipv4_address"
+          else
+            echo "Usage: $0 -pon -t <VlanID> <serialnumber> -s <default_gateway> <ipv4_address>"
+            exit 1
+          fi
+        else
+          set_pon_mode "-t" "$VlanID" "$serialnumber"
+        fi
+      else
+        echo "Usage: $0 -pon -t <VlanID> <serialnumber> [-s <default_gateway> <ipv4_address>]"
+        exit 1
+      fi
+    else
+      echo "Usage: $0 -pon -t <VlanID> <serialnumber> [-s <default_gateway> <ipv4_address>]"
+      exit 1
+    fi
+  elif [ "$1" = "-eth" ]; then
+    if [ "$2" = "-t" ]; then
+      if [ $# -ge 3 ]; then
+        VlanID="$3"
+        shift 3
+        if [ "$1" = "-s" ]; then
+          if [ $# -ge 3 ]; then
+            default_gateway="$2"
+            ipv4_address="$3"
+            shift 3
+            set_ethernet_mode "-t" "$VlanID"  "-s" "$default_gateway" "$ipv4_address"
+          else
+            echo "Usage: $0 -eth -t <VlanID> -s <default_gateway> <ipv4_address>"
+            exit 1
+          fi
+        else
+          set_ethernet_mode "$VlanID"
+        fi
+      else
+        echo "Usage: $0 -eth -t <VlanID> [-s <default_gateway> <ipv4_address>]"
+        exit 1
+      fi
+    else
+      echo "Usage: $0 -eth -t <VlanID> [-s <default_gateway> <ipv4_address>]"
+      exit 1
+    fi
+  fi
+
+  if [ "$1" = "-wifi" ]; then
+    if [ $# -ge 2 ]; then
+      wifi_band="$2"
+      set_wifi "$wifi_band"
+    else
+      set_wifi
+    fi
+  fi
+}
+set_mode "$@"
