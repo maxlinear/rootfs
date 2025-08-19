@@ -64,7 +64,7 @@ else
 	rm $(1)/etc/networklayout-lgm.json
 	mv $(1)/etc/networklayout-octopus.json $(1)/etc/networklayout.json
 endif
-	echo -ne UPDK-9.1.90 > $(1)/etc/version
+	echo -ne UPDK-9.2.0 > $(1)/etc/version
 	date +%H%M-%d%b%y > $(1)/etc/timestamp
 endef
 

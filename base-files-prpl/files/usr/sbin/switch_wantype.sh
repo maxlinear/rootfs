@@ -35,15 +35,5 @@ if [ "$VlanTerminationNumberOfEntries" -gt 0 ]; then
 	ubus-cli Device.IP.Interface.2.LowerLayers="Device.Ethernet.Link.2."
 fi
 
-rm -rf /etc/config/ppa
-
-if [ "$new_wantype" = "pon" ]; then
-	sed -i '/"wan": {/,/}/s/"device": "[^"]*"/"device": "VANI0"/' /etc/board.json
-fi
-
-if [ "$new_wantype" = "eth" ]; then
-	sed -i '/"wan": {/,/}/s/"device": "[^"]*"/"device": "eth1"/' /etc/board.json
-fi
-
 echo "Rebooting the board"
 reboot

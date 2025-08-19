@@ -12,37 +12,27 @@ CFG=/etc/board.json
 PWHMCFG=/etc/networklayout.json
 sys_cli_ppa_file=/tmp/ppacmd_lines
 
+update_interfaces() {
+	interfaces=""
+	device_path="/sys/firmware/devicetree/base/aliases/eth0_*"
+	for eth in $device_path
+	do
+		if [ -f "$eth" ]
+		then
+			ethname="$(basename $eth)"
+			interfaces="$interfaces $ethname"
+		fi
+	done
+	echo "$interfaces"
+}
+
 generate_ppa_config() {
 	local ifname
 	if [ "$1" == "lan" ]
 	then
-		json_select network
-			json_select "$1"
-				if json_is_a ports array
-				then
-					json_select ports
-					idx=1
-					while json_is_a ${idx} string 
-					do
-						json_get_var port $idx
-						if [ ${idx} == 1 ]
-						then
-							ifname="$port"
-						else
-							ifname="$ifname $port"
-						fi
-						idx=$(( idx + 1 ))
-					done
-					json_select ..
-				fi
-			json_select ..
-		json_select ..
+		ifname=$(update_interfaces)
 	else [ "$1" == "wan" ]
-		json_select network
-			json_select "$1"
-				json_get_var ifname device
-			json_select ..
-		json_select ..
+		ifname="$(cat /proc/device-tree/wan/ifname)" 2>/dev/null
 	fi
 
 	if [ "$1" == "lan" -o "$1" == "wan" ]
@@ -124,17 +114,41 @@ prepare_ppa_cmds_wireless() {
 	fi
 }
 
+create_ppa_config() {
+	[ -s $CFG ] || /bin/board_detect || exit 1
+
+	json_init
+	json_load "$(cat ${CFG})"
+
+	json_get_keys keys
+	json_get_keys keys network
+	for key in $keys; do generate_ppa_config $key; done
+}
+
+check_content() {
+	local section="$1"
+	local section_type
+	local wanname
+	local ifname
+
+	config_get section_type $section type
+	config_get ifname $section ifname
+	if [ "$section_type" = "wan" ]; then
+		wanname="$(cat /proc/device-tree/wan/ifname 2>/dev/null)"
+		if [ "$wanname" != "$ifname" ]
+		then
+			rm -rf /etc/config/ppa
+			create_ppa_config
+		fi
+	fi
+}
+
 start_service() {
-	if [ ! -s /etc/config/ppa ]
-	then
-		[ -s $CFG ] || /bin/board_detect || exit 1
-
-		json_init
-		json_load "$(cat ${CFG})"
-
-		json_get_keys keys
-		json_get_keys keys network
-		for key in $keys; do generate_ppa_config $key; done
+	if [ -s /etc/config/ppa ]; then
+		config_load ppa
+		config_foreach check_content ppa
+	else
+		create_ppa_config
 	fi
 	if [ -s "$sys_cli_ppa_file" ]
 	then
