@@ -38,32 +38,6 @@ endef
 
 define Package/$(PKG_NAME)/install
 	$(CP) ./files/* $(1)/
-ifeq ($(CONFIG_TARGET_DEVICE_intel_x86_lgm_DEVICE_LGM_PRPL),y)
-	rm $(1)/etc/networklayout-ospv1.json
-	rm $(1)/etc/networklayout-ospv2.json
-	rm $(1)/etc/networklayout-octopus.json
-	mv $(1)/etc/networklayout-lgm.json $(1)/etc/networklayout.json
-else ifeq ($(CONFIG_TARGET_DEVICE_intel_x86_lgm_DEVICE_PRPL_OSP_TB341_v2),y)
-	rm $(1)/etc/networklayout-lgm.json
-	rm $(1)/etc/networklayout-ospv1.json
-	rm $(1)/etc/networklayout-octopus.json
-	mv $(1)/etc/networklayout-ospv2.json $(1)/etc/networklayout.json
-else ifeq ($(CONFIG_TARGET_DEVICE_intel_x86_lgm_DEVICE_PRPL_OSP_TB341),y)
-	rm $(1)/etc/networklayout-lgm.json
-	rm $(1)/etc/networklayout-ospv2.json
-	rm $(1)/etc/networklayout-octopus.json
-	mv $(1)/etc/networklayout-ospv1.json $(1)/etc/networklayout.json
-else ifeq ($(CONFIG_TARGET_DEVICE_intel_x86_lgm_DEVICE_PRPL_MB_URX),y)
-	rm $(1)/etc/networklayout-lgm.json
-	rm $(1)/etc/networklayout-ospv1.json
-	rm $(1)/etc/networklayout-ospv2.json
-	mv $(1)/etc/networklayout-octopus.json $(1)/etc/networklayout.json
-else
-	rm $(1)/etc/networklayout-ospv1.json
-	rm $(1)/etc/networklayout-ospv2.json
-	rm $(1)/etc/networklayout-lgm.json
-	mv $(1)/etc/networklayout-octopus.json $(1)/etc/networklayout.json
-endif
 	echo -ne UPDK-9.2.0 > $(1)/etc/version
 	date +%H%M-%d%b%y > $(1)/etc/timestamp
 endef
