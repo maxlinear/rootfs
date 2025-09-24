@@ -169,94 +169,195 @@ set_pon_mode() {
 }
 
 set_wifi() {
-    # Check if an optional parameter is provided
-    case "$1" in
-        2G)
+    # Check the board model
+    board="$(cat /proc/device-tree/model)" 2>/dev/null
+
+    if [ "$board" = "osp-tb341" ] || [ "$board" = "osp-tb341-v2" ]; then
+        # Current configuration
+        case "$1" in
+            2G)
+                echo "Configuring 2.4G WiFi..."
+                ubus call WiFi.AccessPoint.2 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"ObssCoexistenceEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.2 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.2 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.SSID.2 set '{"parameters": {"SSID": "2.4G_PRPL"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingChannelBandwidth": "40MHz"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.1 _set '{"parameters": {"Channel": "11"}}' > /dev/null 2>&1
+                sleep 1
+                ;;
+            5G)
+                echo "Configuring 5G WiFi..."
+                ubus call WiFi.AccessPoint.1 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.1 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.1 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.SSID.1 _set '{"parameters": {"SSID": "5G_PRPL"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.2 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.2 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.2 _set '{"parameters": {"Channel": "36"}}' > /dev/null 2>&1
+                sleep 1
+                ;;
+            6G)
+                echo "Configuring 6G WiFi..."
+                ubus call WiFi.AccessPoint.3 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"MFPConfig": "Required"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.3 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.3 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.SSID.3 _set '{"parameters": {"SSID": "6G_PRPL"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"ModeEnabled": "WPA3-Personal"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"SAEPassphrase": "password"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.3 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.3 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
+                sleep 1
+                ubus call WiFi.Radio.3 _set '{"parameters": {"Channel": "37"}}' > /dev/null 2>&1
+                sleep 1
+                ;;
+            *)
+                echo "Configuring all WiFi bands (2.4G, 5G, 6G)..."
+                set_wifi 2G
+                set_wifi 5G
+                set_wifi 6G
+                ;;
+        esac
+    else
+        case "$1" in
+          2G)
             echo "Configuring 2.4G WiFi..."
-            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.1 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.1 _set '{"parameters": {"ObssCoexistenceEnable": "false"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.AccessPoint.2 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.SSID.2 set '{"parameters": {"SSID": "2.4G_PRPL"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.AccessPoint.2.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.Radio.1 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.Radio.1 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingChannelBandwidth": "40MHz"}}' > /dev/null 2>&1
-            sleep 1
-            ubus call WiFi.Radio.1 _set '{"parameters": {"Channel": "11"}}' > /dev/null 2>&1
-            sleep 1
-            ;;
-        5G)
-            echo "Configuring 5G WiFi..."
-            ubus call WiFi.AccessPoint.1 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.AccessPoint.1 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.AccessPoint.1 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.SSID.1 _set '{"parameters": {"SSID": "5G_PRPL"}}' > /dev/null 2>&1
+            ubus call WiFi.SSID.1 _set '{"parameters": {"SSID": "MXL_2G"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"KeyPassPhrase": "password"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.1.Security _set '{"parameters": {"KeyPassPhrase": "12345678"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"AutoChannelEnable": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"ObssCoexistenceEnable": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1.Vendor _set '{"parameters": {"Ignore40MhzIntolerant": "1"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"OperatingChannelBandwidth": "40MHz"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.1 _set '{"parameters": {"Channel": "10"}}' > /dev/null 2>&1
+            sleep 1
+            ;;
+          5G)
+            echo "Configuring 5G WiFi..."
+            ubus call WiFi.AccessPoint.10 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"ObssCoexistenceEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.10 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.10 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.SSID.10 _set '{"parameters": {"SSID": "MXL_5G"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.10.Security _set '{"parameters": {"ModeEnabled": "WPA2-Personal"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.10.Security _set '{"parameters": {"KeyPassPhrase": "12345678"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.2 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.Radio.2 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"AutoChannelEnable": "true"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.2 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.Radio.2 _set '{"parameters": {"Channel": "36"}}' > /dev/null 2>&1
+            ubus call WiFi.Radio.2 _set '{"parameters": {"Channel": "100"}}' > /dev/null 2>&1
             sleep 1
             ;;
-        6G)
+          6G)
             echo "Configuring 6G WiFi..."
-            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.18 _set '{"parameters": {"Enable": "1"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"MFPConfig": "Required"}}' > /dev/null 2>&1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"ObssCoexistenceEnable": "false"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.18.Security _set '{"parameters": {"MFPConfig": "Required"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.3 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.18 _set '{"parameters": {"IsolationEnable": "false"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.SSID.3 _set '{"parameters": {"SSID": "6G_PRPL"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.18 _set '{"parameters": {"SSIDAdvertisementEnabled": "true"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"ModeEnabled": "WPA3-Personal"}}' > /dev/null 2>&1
+            ubus call WiFi.SSID.18 _set '{"parameters": {"SSID": "MXL_6G"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.AccessPoint.3.Security _set '{"parameters": {"SAEPassphrase": "password"}}' > /dev/null 2>&1
+            ubus call WiFi.AccessPoint.18.Security _set '{"parameters": {"ModeEnabled": "WPA3-Personal"}}' > /dev/null 2>&1
+            sleep 1
+            ubus call WiFi.AccessPoint.18.Security _set '{"parameters": {"SAEPassphrase": "12345678"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.3 _set '{"parameters": {"RegulatoryDomain": "US"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.Radio.3 _set '{"parameters": {"AutoChannelEnable": "false"}}' > /dev/null 2>&1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"AutoChannelEnable": "true"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingStandards": "ax"}}' > /dev/null 2>&1
             sleep 1
             ubus call WiFi.Radio.3 _set '{"parameters": {"OperatingChannelBandwidth": "160MHz"}}' > /dev/null 2>&1
             sleep 1
-            ubus call WiFi.Radio.3 _set '{"parameters": {"Channel": "37"}}' > /dev/null 2>&1
+            ubus call WiFi.Radio.3 _set '{"parameters": {"Channel": "65"}}' > /dev/null 2>&1
             sleep 1
             ;;
-        *)
+          *)
             echo "Configuring all WiFi bands (2.4G, 5G, 6G)..."
             set_wifi 2G
             set_wifi 5G
             set_wifi 6G
             ;;
-    esac
+        esac 
+    fi
 }
 
 set_mode() {
