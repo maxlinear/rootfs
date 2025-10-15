@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+
+. /lib/functions/system.sh
+
+START=19
+
+WIRELESS_UCI_CONFIG="/etc/config/wireless"
+BACKUP_WIRELESS_UCI_CONFIG="/etc/config/prpl.wireless.backup"
+
+start() {
+    echo "MaxLinear WIFI START" > /dev/console
+
+    # pwhm and vendor module are managing Wireless
+    # prplmesh_whm init script will handle removing wireless uci config
+    # save a backup copy of default wireless uci config
+    if [ -e $WIRELESS_UCI_CONFIG ] && [ ! -e $BACKUP_WIRELESS_UCI_CONFIG ]; then
+        echo "# Wireless is managed by prplMesh Wireless Hardware Manager" >> /etc/config/wireless
+        echo "# this is Backup of previous configuration that was available at /etc/config/wireless" >> /etc/config/wireless
+        cp $WIRELESS_UCI_CONFIG $BACKUP_WIRELESS_UCI_CONFIG
+    fi
+
+    if [ ! -f $WIRELESS_UCI_CONFIG ]; then
+        echo "No wireless uci config - generate default" > /dev/console
+        /sbin/wifi config
+    fi
+}
+
+stop() {
+    echo "MaxLinear WIFI STOP" > /dev/console
+
+}
