@@ -43,8 +43,9 @@ update_interfaces() {
 	echo "$interfaces"
 }
 
-board="$(cat /proc/device-tree/model)" 2>/dev/null
 
+board="$(cat /tmp/sysinfo/board_name)" 2>/dev/null
+wan_ifname="$(cat /proc/device-tree/wan/ifname)" 2>/dev/null
 
 case "$board" in
 pc-engines-apu|pc-engines-apu2)
@@ -57,25 +58,9 @@ traverse-technologies-geos)
 	macaddr="$(cat /sys/class/net/eth0/address)" 2>/dev/null
 	[ -n "$macaddr" ] && ucidef_set_interface_macaddr "wan" "$macaddr"
 	;;
-mxl,osp-tb341-v2)
-	interfaces=$(update_interfaces osp-tb341-v2)
+mxl,lgm|mxl,osp-tb341|mxl,osp-tb341-v2)
+	interfaces=$(update_interfaces)
 	ucidef_set_interface_lan "$interfaces"
-	wan_alias="$(cat /sys/firmware/devicetree/base/aliases/sfp)" 2>/dev/null
-	wan_ifname="$(cat /sys/firmware/devicetree/base/$wan_alias/label)" 2>/dev/null
-	ucidef_set_interface_wan "$wan_ifname" "dhcp"
-	;;
-mxl,osp-tb341)
-    interfaces=$(update_interfaces osp-tb341)
-    ucidef_set_interface_lan "$interfaces"
-    wan_alias="$(cat /sys/firmware/devicetree/base/aliases/wan)" 2>/dev/null
-    wan_ifname="$(cat /sys/firmware/devicetree/base/$wan_alias/label)" 2>/dev/null
-    ucidef_set_interface_wan "$wan_ifname" "dhcp"
-    ;;
-*)
-	interfaces=$(update_interfaces lgm)
-	ucidef_set_interface_lan "$interfaces"
-	wan_alias="$(cat /sys/firmware/devicetree/base/aliases/wan)" 2>/dev/null
-	wan_ifname="$(cat /sys/firmware/devicetree/base/$wan_alias/label)" 2>/dev/null
 	ucidef_set_interface_wan "$wan_ifname" "dhcp"
 	;;
 

@@ -10,15 +10,12 @@ _exit() {
     log "Exit with $1"
     case "$1" in
         "SUCCESS")
-         echo "SUCCESS"
             exit 0
         ;;
-        "NOT_SUPPORTED")
-            echo "NOT_SUPPORTED"
+        "FAILURE" | "NO_REBOOT")
             exit 1
         ;;
-        "REBOOT_SYSTEM")
-            echo "REBOOT_SYSTEM"
+        "REBOOT")
             # change to "2" when supported by SFP Manager
             exit 0
         ;;
@@ -56,14 +53,19 @@ case "$sfp_type" in
     "SFP_GPON" | "SFP_XGSPON")
         case "$(get_image_mode)" in
             pon*)
+                if [ -x /lib/pon/pon-is-same-sfp.sh ]; then
+                    if /lib/pon/pon-is-same-sfp.sh; then
+                        log "Already PON and same SFP, no reboot"
+                        _exit NO_REBOOT
+                    fi
+                fi
                 log "Already PON, reboot to init again"
-                # future enhancement can check here if reactivation without reboot might be possible
-                _exit REBOOT_SYSTEM
+                _exit REBOOT
             ;;
             *)
                 log "Switch to PON"
                 set_image_mode pon
-                _exit REBOOT_SYSTEM
+                _exit REBOOT
             ;;
         esac
     ;;
@@ -71,22 +73,22 @@ case "$sfp_type" in
         case "$(get_image_mode)" in
             eth*)
                 log "Already ETH, no reboot"
-                _exit SUCCESS
+                _exit NO_REBOOT
             ;;
             *)
                 log "Switch to ETH"
                 set_image_mode eth
-                _exit REBOOT_SYSTEM
+                _exit REBOOT
             ;;
         esac
     ;;
     "SFP_UNKNOWN")
         log "Type of SFP not known, no automatic switching"
-        _exit NOT_SUPPORTED
+        _exit FAILURE
     ;;
     *)
         log "Invalid argument $sfp_type"
         log "Accepted values: SFP_COPPER, SFP_AE, SFP_GPON, SFP_XGSPON, SFP_UNKNOWN"
-        _exit NOT_SUPPORTED
+        _exit FAILURE
     ;;
 esac

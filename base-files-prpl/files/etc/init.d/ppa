@@ -143,6 +143,18 @@ check_content() {
 	fi
 }
 
+configure_vuni_qos() {
+	# Set interface name
+	IFACE=VUNI
+
+	# Extract port number(s) for the given interface
+	port_num=$(cat /sys/kernel/debug/dp/port | awk '/device_name='"$IFACE"'/{flag=1; next} \
+		/module=/{if (flag) exit} flag' | grep port/ | cut -d'/' -f3 | cut -d'(' -f1 | sort -u | head -n 1)
+
+	# Configure QoS for the port
+	echo "port=$port_num bw=8600000" > /sys/kernel/debug/pp/qos0/port
+}
+
 start_service() {
 	if [ -s /etc/config/ppa ]; then
 		config_load ppa
@@ -162,6 +174,10 @@ start_service() {
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
+
+	# Add 8.6Gbps shaper rule for VANI0 to match PON throughput
+	configure_vuni_qos
+
 }
 
 stop_service() {

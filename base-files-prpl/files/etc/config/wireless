@@ -22,7 +22,6 @@ config wifi-device 'radio0'
         option dtim_period '2'
         option short_preamble 'short'
         option num_antennas '4'
-        option wps_pin '12345670'
 
 config wifi-device 'radio2'
         option macaddr '00:50:F1:20:E2:82'
