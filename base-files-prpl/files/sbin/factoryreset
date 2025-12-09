@@ -1,18 +1,21 @@
 #!/bin/sh
 
-_help()
-{
-	echo "Resets system configuration and applications.";
-	exit $1;
+_help() {
+	echo "Resets system configuration and applications."
+	echo "Usage: ${0##*/} [OPTION]"
+	echo "Options:"
+	echo "  -h | --help     Show this help message and exit"
+	echo "  [any]           Proceed with factory reset (any option other than -h)"
+	exit $1
 }
 
 [ -n "$1" ] && {
 	case "$1" in
-		-h) _help 0;
+		-h|--help) _help 0;
 		;;
-		*) _help 1;
+		*)
 		;;
-        esac
+	esac
 }
 
 rm -rf /overlay/.fs_state
