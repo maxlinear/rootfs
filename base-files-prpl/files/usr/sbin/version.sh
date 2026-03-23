@@ -95,6 +95,9 @@ ver_wlan()
 	[ -e /etc/iwlwav_iw.ver ] && . /etc/iwlwav_iw.ver
 	[ -e /etc/iwlwav_tools.ver ] && . /etc/iwlwav_tools.ver
 	[ -e /opt/prplmesh/config/version ] && . /opt/prplmesh/config/version
+   
+	# Get PSD version number from binary file PSD.bin
+	local psd_version=$(hexdump -n 2 -e '2/2 "%u\n"' /lib/firmware/PSD.bin 2>/dev/null)
 
 	echo "Wave wlan version: $wave_release_minor"
 	[ -n "$prplmesh_version" ] && echo "Wave wlan APM version: prplmesh_${prplmesh_version}_${prplmesh_revision}_${prplmesh_build_date}"
@@ -129,7 +132,7 @@ ver_wlan()
 	[ -n "$wave700B_progmodel_ver" ] && echo "Wave wlan Wave700B PROGMODEL version: $wave700B_progmodel_ver"
 	[ -n "$wave_sw_atom_tag" ] && echo "Wave SW Atom(TM) tag: $wave_sw_atom_tag"
 	[ -n "$wave_fpga_sim_ver" ] && echo "FPGA SIM version: $wave_fpga_sim_ver"
-	[ -n "$wave_psd_ver" ] && echo "Wave wlan PSD version: $wave_psd_ver"
+	[ -n "$wave_psd_ver" ] && echo "Wave wlan PSD version: $wave_psd_ver($psd_version)"
 	[ -n "$wave_scripts_ver" ] && echo "Wave wlan scripts version: $wave_scripts_ver"
 	[ -n "$wave_regulatory_ver" ] && echo "Wave wlan regulatory version: $wave_regulatory_ver"	
 }
