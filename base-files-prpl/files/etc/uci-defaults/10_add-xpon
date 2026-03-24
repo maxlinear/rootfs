@@ -1,0 +1,9 @@
+
+uci batch <<EOF
+set network.wan='interface'
+set network.wan.ifname='eth1'
+set network.wan.proto='dhcp'
+set network.pon='interface'
+set network.pon.device='VANI0' 
+commit network
+EOF
