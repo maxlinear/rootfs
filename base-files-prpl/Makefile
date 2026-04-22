@@ -40,6 +40,11 @@ define Package/$(PKG_NAME)/install
 	$(CP) ./files/* $(1)/
 	echo -ne UPDK_9.2.10-ED > $(1)/etc/version
 	date +%H%M-%d%b%y > $(1)/etc/timestamp
+	LUA_VERSION=`grep -E '^CONFIG_PACKAGE_lua[0-9]+\.[0-9]+=y' $(TOPDIR)/.config | sed -E 's/CONFIG_PACKAGE_lua([0-9]+\.[0-9]+)=y/\1/'`; \
+	if [ -n "$$$$LUA_VERSION" ]; then \
+		mkdir -p $(1)/usr/local/lib/lua/$$$$LUA_VERSION/; \
+		mv -vf $(1)/usr/lib/lua/swupdate_handlers.lua $(1)/usr/local/lib/lua/$$$$LUA_VERSION/; \
+	fi
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))
