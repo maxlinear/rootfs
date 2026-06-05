@@ -10,7 +10,7 @@ _exit() {
     log "Exit with $1"
     case "$1" in
         "SUCCESS")
-         echo "SUCCESS"
+            echo "SUCCESS"
             exit 0
         ;;
         "NOT_SUPPORTED")
@@ -47,33 +47,128 @@ get_image_mode() {
 
 set_image_mode() {
     log "Set new image mode $1"
-    fw_setenv wantype "$1"
+    if [ "$action" = "REQUEST" ]; then
+        fw_setenv wantype "$1"
+        return
+    fi
+
+    if [ "$action" = "TEST" ]; then
+        log "Dry run: would set image mode to $1"
+        return
+    fi
+
+    log "Invalid action $action"
+    _exit NOT_SUPPORTED
 }
 
-sfp_type=$1
+reboot_required() {
+    if [ "$action" = "REQUEST" ]; then
+        _exit REBOOT_SYSTEM
+        # shellcheck disable=SC2317
+        return
+    fi
 
-case "$sfp_type" in
-    "SFP_GPON" | "SFP_XGSPON")
+    if [ "$action" = "TEST" ]; then
+        # TODO: Confirm whether TEST should return REBOOT_SYSTEM (for caller planning)
+        # or SUCCESS (to avoid accidental reboot triggers). Keep SUCCESS for safety.
+        log "Dry run: reboot would be required"
+        _exit SUCCESS
+        # shellcheck disable=SC2317
+        return
+    fi
+
+    log "Invalid action $action"
+    _exit NOT_SUPPORTED
+}
+
+physical_type_old=$1
+sfp_type_old=$2
+extra_old=$3
+physical_type_new=$4
+sfp_type_new=$5
+extra_new=$6
+action=$7
+
+if [ "$#" -ne 7 ]; then
+    log "Invalid number of arguments: $#"
+    log "Expected: <physical_type_old> <sfp_type_old> <extra_old> <physical_type_new> <sfp_type_new> <extra_new> <action>"
+    _exit NOT_SUPPORTED
+fi
+
+case "$action" in
+    "TEST" | "REQUEST")
+        :
+    ;;
+    *)
+        log "Invalid action $action"
+        log "Accepted values: TEST, REQUEST"
+        _exit NOT_SUPPORTED
+    ;;
+esac
+
+log "Transition: ${physical_type_old}/${sfp_type_old}/${extra_old} -> ${physical_type_new}/${sfp_type_new}/${extra_new}, action=${action}"
+
+mode_target=
+
+case "$physical_type_new" in
+    "GPON")
+        mode_target=pon
+    ;;
+    "Ethernet")
+        mode_target=eth
+    ;;
+    "SFP")
+        case "$sfp_type_new" in
+            "SFP_GPON" | "SFP_XGPON" | "SFP_NGPON2" | "SFP_XGSPON")
+                mode_target=pon
+            ;;
+            "SFP_OPTICAL_ETHERNET" | "SFP_ELECTRICAL_ETHERNET")
+                mode_target=eth
+            ;;
+            "SFP_MOCA" | "SFP_EPON" | "SFP_UNSUPPORTED")
+                log "Unsupported SFP type $sfp_type_new for automatic switching"
+                _exit NOT_SUPPORTED
+            ;;
+            *)
+                log "Invalid SFP type $sfp_type_new"
+                _exit NOT_SUPPORTED
+            ;;
+        esac
+    ;;
+    "ADSL" | "VDSL" | "GFAST" | "Bridge" | "WWAN")
+        # TODO: Define expected image mode mapping for non-Ethernet/non-PON types.
+        log "Unsupported physical type $physical_type_new for automatic switching"
+        _exit NOT_SUPPORTED
+    ;;
+    *)
+        log "Invalid physical type $physical_type_new"
+        _exit NOT_SUPPORTED
+    ;;
+esac
+
+case "$mode_target" in
+    pon)
         case "$(get_image_mode)" in
             pon*)
                 if [ -x /lib/pon/pon-is-same-sfp.sh ]; then
                     if /lib/pon/pon-is-same-sfp.sh; then
                         log "Already PON and same SFP, no reboot"
-                        _exit NO_REBOOT
+                        _exit SUCCESS
                     fi
                 fi
+
                 log "Already PON, reboot to init again"
                 # future enhancement can check here if reactivation without reboot might be possible
-                _exit REBOOT_SYSTEM
+                reboot_required
             ;;
             *)
                 log "Switch to PON"
                 set_image_mode pon
-                _exit REBOOT_SYSTEM
+                reboot_required
             ;;
         esac
     ;;
-    "SFP_COPPER" | "SFP_AE")
+    eth)
         case "$(get_image_mode)" in
             eth*)
                 log "Already ETH, no reboot"
@@ -82,17 +177,12 @@ case "$sfp_type" in
             *)
                 log "Switch to ETH"
                 set_image_mode eth
-                _exit REBOOT_SYSTEM
+                reboot_required
             ;;
         esac
     ;;
-    "SFP_UNKNOWN")
-        log "Type of SFP not known, no automatic switching"
-        _exit NOT_SUPPORTED
-    ;;
     *)
-        log "Invalid argument $sfp_type"
-        log "Accepted values: SFP_COPPER, SFP_AE, SFP_GPON, SFP_XGSPON, SFP_UNKNOWN"
+        log "Internal error: unsupported target mode $mode_target"
         _exit NOT_SUPPORTED
     ;;
 esac
