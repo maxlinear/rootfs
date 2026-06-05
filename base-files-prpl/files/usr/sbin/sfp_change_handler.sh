@@ -20,7 +20,7 @@ _exit() {
         "REBOOT_SYSTEM")
             echo "REBOOT_SYSTEM"
             # change to "2" when supported by SFP Manager
-            exit 0
+            exit 2
         ;;
         *)
             # try if param is a number,
