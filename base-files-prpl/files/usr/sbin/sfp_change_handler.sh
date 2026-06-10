@@ -19,7 +19,6 @@ _exit() {
         ;;
         "REBOOT_SYSTEM")
             echo "REBOOT_SYSTEM"
-            # change to "2" when supported by SFP Manager
             exit 2
         ;;
         *)
@@ -54,26 +53,6 @@ set_image_mode() {
 
     if [ "$action" = "TEST" ]; then
         log "Dry run: would set image mode to $1"
-        return
-    fi
-
-    log "Invalid action $action"
-    _exit NOT_SUPPORTED
-}
-
-reboot_required() {
-    if [ "$action" = "REQUEST" ]; then
-        _exit REBOOT_SYSTEM
-        # shellcheck disable=SC2317
-        return
-    fi
-
-    if [ "$action" = "TEST" ]; then
-        # TODO: Confirm whether TEST should return REBOOT_SYSTEM (for caller planning)
-        # or SUCCESS (to avoid accidental reboot triggers). Keep SUCCESS for safety.
-        log "Dry run: reboot would be required"
-        _exit SUCCESS
-        # shellcheck disable=SC2317
         return
     fi
 
@@ -138,11 +117,11 @@ case "$physical_type_new" in
     "ADSL" | "VDSL" | "GFAST" | "Bridge" | "WWAN")
         # TODO: Define expected image mode mapping for non-Ethernet/non-PON types.
         log "Unsupported physical type $physical_type_new for automatic switching"
-        _exit NOT_SUPPORTED
+        _exit SUCCESS
     ;;
     *)
         log "Invalid physical type $physical_type_new"
-        _exit NOT_SUPPORTED
+        _exit SUCCESS
     ;;
 esac
 
@@ -159,12 +138,12 @@ case "$mode_target" in
 
                 log "Already PON, reboot to init again"
                 # future enhancement can check here if reactivation without reboot might be possible
-                reboot_required
+                _exit REBOOT_SYSTEM
             ;;
             *)
                 log "Switch to PON"
                 set_image_mode pon
-                reboot_required
+                _exit REBOOT_SYSTEM
             ;;
         esac
     ;;
@@ -177,7 +156,7 @@ case "$mode_target" in
             *)
                 log "Switch to ETH"
                 set_image_mode eth
-                reboot_required
+                _exit REBOOT_SYSTEM
             ;;
         esac
     ;;
