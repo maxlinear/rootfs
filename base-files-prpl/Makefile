@@ -38,7 +38,7 @@ endef
 
 define Package/$(PKG_NAME)/install
 	$(CP) ./files/* $(1)/
-	echo -ne UPDK_9.2.10-ER > $(1)/etc/version
+	echo -ne UPDK-9.2.10-ER > $(1)/etc/version
 	date +%H%M-%d%b%y > $(1)/etc/timestamp
 endef
 
