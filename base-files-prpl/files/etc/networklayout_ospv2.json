@@ -50,5 +50,19 @@
 		{"Alias": "radio0","OperatingFrequency": "2.4GHz"},
 		{"Alias": "radio2","OperatingFrequency": "5GHz"},
 		{"Alias": "radio4","OperatingFrequency": "6GHz"}
-	]
+	],
+	"SFPData": [
+                {
+                        "Type": "sfp",
+                        "SFPCage": "1",
+                        "SFPCageName": "sfp0",
+                        "SFPInterfaces": [
+                                {
+                                        "Name": "eth1",
+                                        "Type": "ethernet"
+                                }
+                        ]
+                }
+        ]
+
 }

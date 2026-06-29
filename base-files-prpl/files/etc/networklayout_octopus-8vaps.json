@@ -62,7 +62,7 @@
 				{"Alias": "ep2g0","Name": "wlan1"},
 				{"Alias": "ep5g0","Name": "wlan3"},
 				{"Alias": "ep6g0","Name": "wlan5"}
-			]	
+			]
 		},
 		"Guest": {
 			"Name": "br-guest",
@@ -82,5 +82,19 @@
 		{"Alias": "radio0","OperatingFrequency": "2.4GHz"},
 		{"Alias": "radio2","OperatingFrequency": "5GHz"},
 		{"Alias": "radio4","OperatingFrequency": "6GHz"}
-	]
+	],
+	"SFPData": [
+                {
+                        "Type": "sfp",
+                        "SFPCage": "1",
+                        "SFPCageName": "sfp0",
+                        "SFPInterfaces": [
+                                {
+                                        "Name": "eth1",
+                                        "Type": "ethernet"
+                                }
+                        ]
+                }
+        ]
+
 }
