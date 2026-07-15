@@ -1,0 +1,316 @@
+#!/bin/sh /etc/rc.common
+# CPU Ingress QoS Initialization Script
+# This script configures TC rules for CPU ingress traffic classification
+# NOTE: To dry run the script execute "DRY_RUN=1 /etc/init.d/cpu_qos start"
+
+START=90
+STOP=10
+
+EXTRA_COMMANDS="status cleanup"
+EXTRA_HELP="        status  Show current QoS configuration
+        cleanup Remove all QoS rules"
+
+DRY_RUN=${DRY_RUN:-0}
+
+# CPU Interface definitions
+CPU0_HIGH="cpu0_0_0"  # CPU0 High Priority
+CPU0_LOW="cpu0_1_0"   # CPU0 Low Priority
+CPU1_HIGH="cpu1_2_0"  # CPU1 High Priority
+CPU1_LOW="cpu1_3_0"   # CPU1 Low Priority
+
+# LAN and WAN interfaces
+LAN_PORTS="eth0_1 eth0_2 eth0_3 eth0_4 eth0_5"
+ETH_WAN_PORT="eth1"
+PON_WAN_PORTS="gem-omci VANI0 VUNI0_0"
+
+# Cookie values for group identification
+COOKIE_LAN_GROUP=0001
+COOKIE_WAN_GROUP=0002
+
+# WAN type and ports (set by detect_wan_port)
+WAN_TYPE=""  # "ETH" or "PON"
+WAN_PORTS=""  # Space-separated list of WAN ports to configure
+
+log_msg() {
+    logger -t cpu_qos -p daemon.info "$1"
+    echo "$1"
+}
+
+error_msg() {
+    logger -t cpu_qos -p daemon.err "$1"
+    echo "ERROR: $1" >&2
+}
+
+exec_cmd() {
+    echo ">>> $@"
+    [ "$DRY_RUN" = "1" ] && return 0
+    "$@"
+}
+
+
+# Detect which WAN port is available
+detect_wan_port() {
+    local max_wait=30
+    local waited=0
+
+    log_msg "Detecting available WAN port..."
+    while [ $waited -lt $max_wait ]; do
+        # Check for Ethernet WAN
+        if ip link show "$ETH_WAN_PORT" >/dev/null 2>&1; then
+            WAN_TYPE="ETH"
+            WAN_PORTS="$ETH_WAN_PORT"
+            log_msg "Detected Ethernet WAN port: $WAN_PORTS"
+            return 0
+        fi
+
+        # Check for PON WAN - all three interfaces must exist
+        local pon_all_present=1
+        for pon_iface in $PON_WAN_PORTS; do
+            if ! ip link show "$pon_iface" >/dev/null 2>&1; then
+                pon_all_present=0
+                break
+            fi
+        done
+
+        if [ $pon_all_present -eq 1 ]; then
+            WAN_TYPE="PON"
+            WAN_PORTS="$PON_WAN_PORTS"
+            log_msg "Detected PON WAN ports: $WAN_PORTS (waited ${waited}s)"
+            return 0
+        fi
+
+        # Neither ETH nor PON found yet, wait and retry
+        if [ $waited -eq 0 ]; then
+            log_msg "WAN interfaces not ready yet, waiting up to ${max_wait}s..."
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    error_msg "Timeout waiting for WAN port (checked $ETH_WAN_PORT and PON ports: $PON_WAN_PORTS)"
+    return 1
+}
+
+# Wait for interfaces to be available
+wait_for_interfaces() {
+    local max_wait=30
+    local waited=0
+
+    log_msg "Waiting for CPU interfaces to be available..."
+
+    while [ $waited -lt $max_wait ]; do
+        if ip link show "$CPU0_HIGH" >/dev/null 2>&1 && \
+           ip link show "$CPU0_LOW" >/dev/null 2>&1; then
+            log_msg "CPU interfaces are ready"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    error_msg "Timeout waiting for CPU interfaces"
+    return 1
+}
+
+# Create High Priority Queue structure (PRIO with 7 bands)
+create_high_priority_queues() {
+    local iface=$1
+
+    log_msg "Creating high priority queues on $iface..."
+
+    # PRIO qdisc with 7 bands (0-6)
+    # Band 0: Highest priority, Band 6: Lowest priority
+    exec_cmd tc qdisc replace dev "$iface" root handle 5: prio bands 7 priomap 0 1 2 3 4 5 6
+    if [ $? -ne 0 ]; then
+        error_msg "Failed to create PRIO qdisc on $iface"
+        return 1
+    fi
+
+    log_msg "Successfully created high priority queues on $iface"
+    return 0
+}
+
+# Create Low Priority Queue structure (DRR with 6 classes)
+create_low_priority_queues() {
+    local iface=$1
+
+    log_msg "Creating low priority queues on $iface..."
+
+    # DRR qdisc with 6 classes
+    exec_cmd tc qdisc replace dev "$iface" root handle 5: drr
+    if [ $? -ne 0 ]; then
+        error_msg "Failed to create DRR qdisc on $iface"
+        return 1
+    fi
+
+    # Add 6 classes with equal quantum (1024k)
+    for i in 1 2 3 4 5 6; do
+        exec_cmd tc class add dev "$iface" parent 5: classid 5:$i drr quantum 1024k
+        if [ $? -ne 0 ]; then
+            error_msg "Failed to add class 5:$i on $iface"
+            return 1
+        fi
+    done
+
+    log_msg "Successfully created low priority queues on $iface"
+    return 0
+}
+
+# Configure High Priority Traffic Rules with Group Association
+# Band to Class mapping: Band 0->5:1 (highest), Band 1->5:2, ... Band 6->5:7 (lowest)
+# Each rule includes indev and cookie to associate with low priority groups
+configure_rules() {
+    local iface=$1
+    local prio=1
+    # ===================================================================
+    # LAN Group Rules
+    # ===================================================================
+    log_msg "Configuring LAN Group Rules on $iface..."
+    # DHCP - Server
+    exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+        indev eth0_1 skip_sw ip_proto udp dst_port 67 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_LAN_GROUP)
+    prio=$((prio + 1))
+
+    # DHCP - Client
+    exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+        indev eth0_2 skip_sw ip_proto udp dst_port 68 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_LAN_GROUP)
+    prio=$((prio + 1))
+
+    # ARP
+    exec_cmd tc filter add dev "$iface" ingress pref $prio protocol 802.1Q flower \
+        indev eth0_3 skip_sw vlan_ethtype 0x0806 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_LAN_GROUP)
+    prio=$((prio + 1))
+
+    # SIP UDP
+    exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+        indev eth0_4 skip_sw ip_proto udp dst_port 5060 classid 5:2 action ok cookie $(printf "%04x" $COOKIE_LAN_GROUP)
+    prio=$((prio + 1))
+
+    # SIP TCP
+    exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+        indev eth0_5 skip_sw ip_proto tcp dst_port 5060 classid 5:2 action ok cookie $(printf "%04x" $COOKIE_LAN_GROUP)
+    prio=$((prio + 1))
+
+    # ===================================================================
+    # WAN Group Rules
+    # ===================================================================
+    log_msg "Configuring WAN Group Rules on $iface for WAN type: $WAN_TYPE ($WAN_PORTS)..."
+
+    # Apply rules for each WAN port
+    for wan_port in $WAN_PORTS; do
+        log_msg "Adding WAN rules for port: $wan_port"
+        prio=100  # Start WAN rules at higher prio to avoid conflict with LAN
+
+        # DHCP Server
+        exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+            indev "$wan_port" skip_sw ip_proto udp dst_port 68 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_WAN_GROUP)
+        prio=$((prio + 1))
+
+        # DHCP Client
+        exec_cmd tc filter add dev "$iface" ingress pref $prio protocol ip flower \
+            indev "$wan_port" skip_sw ip_proto udp dst_port 67 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_WAN_GROUP)
+        prio=$((prio + 1))
+
+        if [ "$WAN_TYPE" = "PON" ]; then
+            # OMCI
+            exec_cmd tc filter add dev "$iface" ingress pref $prio protocol 802.1Q flower \
+                indev "$wan_port" skip_sw vlan_ethtype 0x88b7  classid 5:1 action ok cookie $(printf "%04x" $COOKIE_WAN_GROUP)
+            prio=$((prio + 1))
+        fi
+
+        # ARP
+        exec_cmd tc filter add dev "$iface" ingress pref $prio protocol 802.1Q flower \
+            indev "$wan_port" skip_sw vlan_ethtype 0x0806 classid 5:1 action ok cookie $(printf "%04x" $COOKIE_WAN_GROUP)
+        prio=$((prio + 1))
+    done
+
+    return 0
+}
+
+# Clean up existing configuration
+cleanup_qos() {
+    log_msg "Cleaning up existing QoS configuration..."
+
+    for iface in $CPU0_HIGH $CPU0_LOW $CPU1_HIGH $CPU1_LOW; do
+        if ip link show "$iface" >/dev/null 2>&1; then
+            tc qdisc del dev "$iface" root 2>/dev/null
+            tc qdisc del dev "$iface" clsact 2>/dev/null
+        fi
+    done
+
+    log_msg "Cleanup completed"
+}
+
+# Main start function
+start() {
+    log_msg "Starting CPU Ingress QoS configuration..."
+
+    # Wait for interfaces
+    if ! wait_for_interfaces; then
+        error_msg "CPU interfaces not available, aborting"
+        return 1
+    fi
+
+    # Detect which WAN port is available
+    if ! detect_wan_port; then
+        error_msg "WAN port detection failed, aborting"
+        return 1
+    fi
+
+    # Create queue structures
+    create_high_priority_queues "$CPU0_HIGH" || return 1
+    create_high_priority_queues "$CPU1_HIGH" || return 1
+    create_low_priority_queues "$CPU0_LOW" || return 1
+    create_low_priority_queues "$CPU1_LOW" || return 1
+
+    # Add clsact for ingress filtering on high priority interface
+    log_msg "Creating clsact qdisc for ingress filtering..."
+    exec_cmd tc qdisc replace dev "$CPU0_HIGH" handle ffff: clsact
+    if [ $? -ne 0 ]; then
+        error_msg "Failed to create clsact qdisc on $CPU0_HIGH"
+        return 1
+    fi
+
+    # Configure traffic rules with group association
+    configure_rules "$CPU0_HIGH" || return 1
+
+    log_msg "CPU Ingress QoS configuration completed successfully"
+    return 0
+}
+
+# Stop function
+stop() {
+    log_msg "Stopping CPU Ingress QoS configuration..."
+    cleanup_qos
+    log_msg "CPU Ingress QoS stopped"
+    return 0
+}
+
+# Restart function
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+# Status function
+status() {
+    echo "=== CPU QoS Configuration Status ==="
+    echo ""
+
+    for iface in $CPU0_HIGH $CPU0_LOW $CPU1_HIGH $CPU1_LOW; do
+        if ip link show "$iface" >/dev/null 2>&1; then
+            echo "Interface: $iface"
+            echo "--- Qdisc ---"
+            tc qdisc show dev "$iface"
+            echo "--- Classes ---"
+            tc class show dev "$iface" 2>/dev/null
+            echo "--- Filters ---"
+            tc filter show dev "$iface" ingress 2>/dev/null | head -20
+            echo ""
+        else
+            echo "Interface: $iface (NOT FOUND)"
+            echo ""
+        fi
+    done
+}
